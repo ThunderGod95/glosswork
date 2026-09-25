@@ -28,7 +28,7 @@ fn main() {
     let cli = Cli::parse();
 
     if cli.server {
-        if let Err(e) = rocket::execute(http::launch()) {
+        if let Err(e) = http::launch() {
             eprintln!("{}", style(format!("HTTP server failed: {e}")).red());
             process::exit(1);
         }

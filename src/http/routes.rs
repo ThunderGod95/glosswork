@@ -1,5 +1,10 @@
-use rocket::{Request, http::Status, response::status::Custom, serde::json::Json, tokio::task};
+use axum::{
+    Json,
+    http::{StatusCode, header},
+    response::{IntoResponse, Response},
+};
 use serde::{Deserialize, Serialize};
+use tokio::task;
 
 use crate::core::{
     glossary::{GlossaryEntry, GlossaryOptions, create_micro_glossary_with_options},
@@ -10,7 +15,7 @@ use crate::core::{
 
 const MAX_FUZZY_THRESHOLD: u32 = 4;
 
-type ApiResult<T> = Result<Json<T>, Custom<Json<ApiErrorResponse>>>;
+type ApiResult<T> = Result<Json<T>, (StatusCode, Json<ApiErrorResponse>)>;
 
 #[derive(Debug, Deserialize)]
 pub(super) struct MatchGlossaryRequest {
@@ -43,20 +48,16 @@ pub(super) struct ApiError {
     pub message: String,
 }
 
-#[rocket::get("/health")]
-pub(super) fn health() -> Json<HealthResponse> {
+pub(super) async fn health() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok",
         version: env!("CARGO_PKG_VERSION"),
     })
 }
 
-#[rocket::post("/glossary/match", format = "json", data = "<request>")]
 pub(super) async fn match_glossary(
-    request: Json<MatchGlossaryRequest>,
+    Json(request): Json<MatchGlossaryRequest>,
 ) -> ApiResult<MatchGlossaryResponse> {
-    let request = request.into_inner();
-
     validate_content(&request.content, "content")?;
     validate_options(request.options)?;
 
@@ -72,12 +73,9 @@ pub(super) async fn match_glossary(
     }))
 }
 
-#[rocket::post("/prompts/translation", format = "json", data = "<request>")]
 pub(super) async fn prepare_translation_prompt(
-    request: Json<PreparePromptRequest>,
+    Json(request): Json<PreparePromptRequest>,
 ) -> ApiResult<PreparePromptResult> {
-    let request = request.into_inner();
-
     validate_content(&request.chapter, "chapter")?;
     validate_content(&request.translation_prompt, "translation_prompt")?;
     validate_options(request.glossary_options)?;
@@ -90,25 +88,42 @@ pub(super) async fn prepare_translation_prompt(
     Ok(Json(result))
 }
 
-#[rocket::catch(default)]
-pub(super) fn default_error(status: Status, _request: &Request<'_>) -> Json<ApiErrorResponse> {
-    Json(ApiErrorResponse {
-        error: ApiError {
-            code: status
-                .reason()
-                .unwrap_or("request_error")
-                .to_lowercase()
-                .replace(' ', "_"),
+pub(super) async fn default_error(mut response: Response) -> Response {
+    let status = response.status();
 
-            message: status.reason().unwrap_or("Request failed").to_string(),
-        },
-    })
+    if (status.is_client_error() || status.is_server_error())
+        && response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            != Some("application/json")
+    {
+        let reason = status.canonical_reason().unwrap_or("Request failed");
+
+        let json = Json(ApiErrorResponse {
+            error: ApiError {
+                code: reason.to_lowercase().replace(' ', "_"),
+                message: reason.to_string(),
+            },
+        })
+        .into_response();
+
+        response.headers_mut().remove(header::CONTENT_LENGTH);
+        response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            json.headers()[header::CONTENT_TYPE].clone(),
+        );
+
+        *response.body_mut() = json.into_body();
+    }
+
+    response
 }
 
 fn validate_content(
     value: &str,
     field: &'static str,
-) -> Result<(), Custom<Json<ApiErrorResponse>>> {
+) -> Result<(), (StatusCode, Json<ApiErrorResponse>)> {
     if value.trim().is_empty() {
         return Err(bad_request(
             "empty_field",
@@ -119,7 +134,7 @@ fn validate_content(
     Ok(())
 }
 
-fn validate_options(options: GlossaryOptions) -> Result<(), Custom<Json<ApiErrorResponse>>> {
+fn validate_options(options: GlossaryOptions) -> Result<(), (StatusCode, Json<ApiErrorResponse>)> {
     if options.fuzzy_threshold > MAX_FUZZY_THRESHOLD {
         return Err(bad_request(
             "invalid_fuzzy_threshold",
@@ -133,9 +148,9 @@ fn validate_options(options: GlossaryOptions) -> Result<(), Custom<Json<ApiError
 fn bad_request(
     code: impl Into<String>,
     message: impl Into<String>,
-) -> Custom<Json<ApiErrorResponse>> {
-    Custom(
-        Status::BadRequest,
+) -> (StatusCode, Json<ApiErrorResponse>) {
+    (
+        StatusCode::BAD_REQUEST,
         Json(ApiErrorResponse {
             error: ApiError {
                 code: code.into(),
@@ -145,21 +160,21 @@ fn bad_request(
     )
 }
 
-fn core_error(error: anyhow::Error) -> Custom<Json<ApiErrorResponse>> {
+fn core_error(error: anyhow::Error) -> (StatusCode, Json<ApiErrorResponse>) {
     eprintln!("Core processing error: {error:#}");
 
     internal_error()
 }
 
-fn join_error(error: task::JoinError) -> Custom<Json<ApiErrorResponse>> {
+fn join_error(error: task::JoinError) -> (StatusCode, Json<ApiErrorResponse>) {
     eprintln!("Blocking worker failed: {error}");
 
     internal_error()
 }
 
-fn internal_error() -> Custom<Json<ApiErrorResponse>> {
-    Custom(
-        Status::InternalServerError,
+fn internal_error() -> (StatusCode, Json<ApiErrorResponse>) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
         Json(ApiErrorResponse {
             error: ApiError {
                 code: "internal_error".to_string(),

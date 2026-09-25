@@ -34,7 +34,11 @@ indicatif = { version = "0.18.3", features = ["rayon"] }
 which = "8.0.0"
 fancy-regex = "0.16.2"
 comrak = "0.54.0"
-rocket = { version = "0.5.1", features = ["json"] }
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "signal", "macros"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
