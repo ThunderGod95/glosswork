@@ -3,7 +3,7 @@ use std::{io, sync::Arc, time::Duration};
 use axum::{
     Json,
     extract::{
-        Path, State,
+        Path, Query, State,
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
     http::{StatusCode, header},
@@ -13,7 +13,144 @@ use serde::{Deserialize, Serialize};
 use tokio::{task, time};
 
 use super::ProjectsConfig;
-use crate::core::projects::{ProjectEntry, project_tree};
+use crate::core::projects::{
+    FileOperation, ProjectEntry, modify_project_file, project_tree, read_project_file,
+};
+
+#[derive(Deserialize)]
+pub(super) struct FilePath {
+    path: String,
+}
+
+#[derive(Deserialize, Serialize)]
+pub(super) struct FileContent {
+    content: String,
+}
+
+#[derive(Deserialize)]
+pub(super) struct MoveRequest {
+    destination: String,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub(super) enum CreateRequest {
+    File {
+        path: String,
+        #[serde(default)]
+        content: String,
+    },
+    Directory {
+        path: String,
+    },
+}
+
+pub(super) async fn read(
+    State(config): State<Option<Arc<ProjectsConfig>>>,
+    Path(project): Path<String>,
+    Query(path): Query<FilePath>,
+) -> Response {
+    let Some(config) = config else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+
+    let result =
+        task::spawn_blocking(move || read_project_file(&config.directory, &project, &path.path))
+            .await;
+
+    let mut response = match result {
+        Ok(Ok(content)) => Json(FileContent { content }).into_response(),
+
+        Ok(Err(error)) => file_error(error).into_response(),
+
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
+
+    response
+}
+
+pub(super) async fn write(
+    State(config): State<Option<Arc<ProjectsConfig>>>,
+    Path(project): Path<String>,
+    Query(path): Query<FilePath>,
+    Json(body): Json<FileContent>,
+) -> StatusCode {
+    modify(
+        config,
+        project,
+        path.path,
+        FileOperation::Write(body.content),
+        StatusCode::NO_CONTENT,
+    )
+    .await
+}
+
+pub(super) async fn move_entry(
+    State(config): State<Option<Arc<ProjectsConfig>>>,
+    Path(project): Path<String>,
+    Query(path): Query<FilePath>,
+    Json(body): Json<MoveRequest>,
+) -> StatusCode {
+    modify(
+        config,
+        project,
+        path.path,
+        FileOperation::Move(body.destination),
+        StatusCode::NO_CONTENT,
+    )
+    .await
+}
+
+pub(super) async fn create(
+    State(config): State<Option<Arc<ProjectsConfig>>>,
+    Path(project): Path<String>,
+    Json(body): Json<CreateRequest>,
+) -> StatusCode {
+    let (path, operation) = match body {
+        CreateRequest::File { path, content } => (path, FileOperation::CreateFile(content)),
+        CreateRequest::Directory { path } => (path, FileOperation::CreateDirectory),
+    };
+    modify(config, project, path, operation, StatusCode::CREATED).await
+}
+
+async fn modify(
+    config: Option<Arc<ProjectsConfig>>,
+    project: String,
+    path: String,
+    operation: FileOperation,
+    success: StatusCode,
+) -> StatusCode {
+    let Some(config) = config else {
+        return StatusCode::SERVICE_UNAVAILABLE;
+    };
+
+    match task::spawn_blocking(move || {
+        modify_project_file(&config.directory, &project, &path, operation)
+    })
+    .await
+    {
+        Ok(Ok(())) => success,
+        Ok(Err(error)) => file_error(error),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+fn file_error(error: io::Error) -> StatusCode {
+    match error.kind() {
+        io::ErrorKind::InvalidInput
+        | io::ErrorKind::InvalidData
+        | io::ErrorKind::NotADirectory
+        | io::ErrorKind::IsADirectory => StatusCode::BAD_REQUEST,
+        io::ErrorKind::NotFound => StatusCode::NOT_FOUND,
+        io::ErrorKind::PermissionDenied => StatusCode::FORBIDDEN,
+        io::ErrorKind::AlreadyExists => StatusCode::CONFLICT,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
 
 pub(super) async fn list(
     State(config): State<Option<Arc<ProjectsConfig>>>,
@@ -66,11 +203,7 @@ async fn scan(
     match task::spawn_blocking(move || project_tree(&config.directory, &project)).await {
         Ok(Ok(entries)) => Ok(entries),
 
-        Ok(Err(error)) => Err(match error.kind() {
-            io::ErrorKind::InvalidInput => StatusCode::BAD_REQUEST,
-            io::ErrorKind::NotFound => StatusCode::NOT_FOUND,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        }),
+        Ok(Err(error)) => Err(file_error(error)),
 
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }

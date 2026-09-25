@@ -19,19 +19,34 @@ pub(super) struct ProjectsConfig {
 }
 
 fn build(projects: Option<Arc<ProjectsConfig>>) -> Router {
-    Router::new()
+    let mut router = Router::new()
         .route("/health", get(health))
-        .route("/api/v1/projects", get(discover_projects))
-        .route("/api/v1/projects/{project}/files", get(project_files::list))
-        .route(
-            "/api/v1/projects/{project}/files/ws",
-            get(project_files::watch),
-        )
         .route("/api/v1/glossary/match", post(match_glossary))
         .route(
             "/api/v1/prompts/translation",
             post(prepare_translation_prompt),
-        )
+        );
+
+    if projects.is_some() {
+        router = router
+            .route("/api/v1/projects", get(discover_projects))
+            .route(
+                "/api/v1/projects/{project}/files",
+                get(project_files::list).post(project_files::create),
+            )
+            .route(
+                "/api/v1/projects/{project}/file",
+                get(project_files::read)
+                    .put(project_files::write)
+                    .patch(project_files::move_entry),
+            )
+            .route(
+                "/api/v1/projects/{project}/files/ws",
+                get(project_files::watch),
+            );
+    }
+
+    router
         .layer(DefaultBodyLimit::max(16 * 1024 * 1024))
         .layer(middleware::map_response(default_error))
         .with_state(projects)
@@ -39,7 +54,7 @@ fn build(projects: Option<Arc<ProjectsConfig>>) -> Router {
 
 pub fn launch() -> anyhow::Result<()> {
     let projects = match std::env::var_os("HTTP_PROJECTS_DIR") {
-        None => anyhow::bail!("Set HTTP_PROJECTS_DIR to enable project discovery"),
+        None => None,
 
         Some(directory) => {
             anyhow::ensure!(!directory.is_empty(), "HTTP_PROJECTS_DIR must not be empty");
