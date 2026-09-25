@@ -1,5 +1,7 @@
 mod routes;
 
+use std::{path::PathBuf, sync::Arc};
+
 use axum::{
     Router,
     extract::DefaultBodyLimit,
@@ -7,11 +9,18 @@ use axum::{
     routing::{get, post},
 };
 
-use routes::{default_error, health, match_glossary, prepare_translation_prompt};
+use routes::{
+    default_error, discover_projects, health, match_glossary, prepare_translation_prompt,
+};
 
-pub fn build() -> Router {
+pub(super) struct ProjectsConfig {
+    directory: PathBuf,
+}
+
+fn build(projects: Option<Arc<ProjectsConfig>>) -> Router {
     Router::new()
         .route("/health", get(health))
+        .route("/api/v1/projects", get(discover_projects))
         .route("/api/v1/glossary/match", post(match_glossary))
         .route(
             "/api/v1/prompts/translation",
@@ -19,9 +28,28 @@ pub fn build() -> Router {
         )
         .layer(DefaultBodyLimit::max(16 * 1024 * 1024))
         .layer(middleware::map_response(default_error))
+        .with_state(projects)
 }
 
 pub fn launch() -> anyhow::Result<()> {
+    let projects = match std::env::var_os("HTTP_PROJECTS_DIR") {
+        None => anyhow::bail!(
+            "Set HTTP_PROJECTS_DIR to enable project discovery"
+        ),
+
+        Some(directory) => {
+            anyhow::ensure!(!directory.is_empty(), "HTTP_PROJECTS_DIR must not be empty");
+
+            let directory = PathBuf::from(directory).canonicalize()?;
+
+            anyhow::ensure!(directory.is_dir(), "HTTP_PROJECTS_DIR must be a directory");
+
+            Some(Arc::new(ProjectsConfig {
+                directory,
+            }))
+        }
+    };
+
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?
@@ -36,7 +64,7 @@ pub fn launch() -> anyhow::Result<()> {
 
             eprintln!("HTTP server listening on http://{}", listener.local_addr()?);
 
-            axum::serve(listener, build())
+            axum::serve(listener, build(projects))
                 .with_graceful_shutdown(shutdown_signal())
                 .await?;
 

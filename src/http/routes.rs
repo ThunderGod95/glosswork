@@ -1,13 +1,18 @@
 use axum::{
     Json,
+    extract::State,
     http::{StatusCode, header},
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tokio::task;
+
+use super::ProjectsConfig;
 
 use crate::core::{
     glossary::{GlossaryEntry, GlossaryOptions, create_micro_glossary_with_options},
+    projects::get_projects,
     prompt::{
         PreparePromptRequest, PreparePromptResult, prepare_translation_prompt as prepare_prompt,
     },
@@ -53,6 +58,33 @@ pub(super) async fn health() -> Json<HealthResponse> {
         status: "ok",
         version: env!("CARGO_PKG_VERSION"),
     })
+}
+
+#[derive(Serialize)]
+struct ProjectsResponse {
+    projects: Vec<String>,
+}
+
+pub(super) async fn discover_projects(
+    State(config): State<Option<Arc<ProjectsConfig>>>,
+) -> Response {
+    let Some(config) = config else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+
+    let result = task::spawn_blocking(move || get_projects(&config.directory)).await;
+
+    let mut response = match result {
+        Ok(Ok(projects)) => Json(ProjectsResponse { projects }).into_response(),
+        Ok(Err(error)) => core_error(error).into_response(),
+        Err(error) => join_error(error).into_response(),
+    };
+
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
+
+    response
 }
 
 pub(super) async fn match_glossary(

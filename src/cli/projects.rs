@@ -1,12 +1,13 @@
+use std::env;
 use std::path::Path;
-use std::{env, fs};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use console::style;
 use dialoguer::FuzzySelect;
 use dialoguer::theme::ColorfulTheme;
 
 use crate::cli::cache::*;
+use crate::core::projects::get_projects;
 
 pub fn select_project(base_path: impl AsRef<Path>) -> Result<String> {
     let base_path = base_path.as_ref();
@@ -70,33 +71,4 @@ pub fn select_project(base_path: impl AsRef<Path>) -> Result<String> {
     }
 
     Ok(selected_project)
-}
-
-pub fn get_projects(base_path: &Path) -> Result<Vec<String>> {
-    if !base_path.is_dir() {
-        bail!(
-            "Failed to read projects: {} is not a valid directory",
-            base_path.display()
-        );
-    }
-
-    let mut projects: Vec<String> = fs::read_dir(base_path)?
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let path = entry.path();
-
-            if path.is_dir() && path.file_name()?.to_str()? != "tscripts" {
-                return Some(path.file_name()?.to_str()?.to_string());
-            }
-            None
-        })
-        .collect();
-
-    projects.sort();
-
-    if projects.is_empty() {
-        bail!("No projects found in: {}", base_path.display());
-    }
-
-    Ok(projects)
 }

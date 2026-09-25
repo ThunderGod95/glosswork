@@ -6,7 +6,7 @@ use strum::VariantArray;
 
 use crate::cli::{
     config::{CONFIG, update_config},
-    projects::{get_projects, select_project},
+    projects::select_project,
     runner::{
         Cli, Command,
         cli::Task,
@@ -15,6 +15,8 @@ use crate::cli::{
         tasks::{run_clean_task, run_next_task},
     },
 };
+
+use crate::core::projects::get_projects;
 
 pub mod cache;
 pub mod clean;
