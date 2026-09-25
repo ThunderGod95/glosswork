@@ -78,7 +78,7 @@ pub fn open_in_editor(paths: &[impl AsRef<OsStr>]) -> Result<()> {
 
     if Editor::try_from(editor_cmd.as_str()).is_err() {
         bail!(
-            "Invalid editor -> '{}'. `ts internal` and `open` are no longer going to work. Please edit the config files manually.",
+            "Invalid editor -> '{}'. `glosswork internal` and `open` are no longer going to work. Please edit the config files manually.",
             editor_cmd
         )
     }

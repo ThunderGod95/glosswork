@@ -840,6 +840,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "glosswork_engine"
+version = "2.1.0"
+dependencies = [
+ "aho-corasick",
+ "anyhow",
+ "arboard",
+ "axum",
+ "bk-tree",
+ "clap",
+ "comrak",
+ "console",
+ "dialoguer",
+ "directories",
+ "fancy-regex",
+ "futures-util",
+ "include_dir",
+ "indicatif",
+ "itertools",
+ "jieba-rs",
+ "num_cpus",
+ "path-clean",
+ "rayon",
+ "sanitize-filename",
+ "serde",
+ "simd-json",
+ "strum",
+ "threadpool",
+ "time",
+ "tokio",
+ "tokio-tungstenite",
+ "toml",
+ "tower",
+ "unicode-normalization",
+ "which",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "half"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2272,44 +2310,6 @@ name = "triple_accel"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "622b09ce2fe2df4618636fb92176d205662f59803f39e70d1c333393082de96c"
-
-[[package]]
-name = "tscripts_rs"
-version = "2.0.0"
-dependencies = [
- "aho-corasick",
- "anyhow",
- "arboard",
- "axum",
- "bk-tree",
- "clap",
- "comrak",
- "console",
- "dialoguer",
- "directories",
- "fancy-regex",
- "futures-util",
- "include_dir",
- "indicatif",
- "itertools",
- "jieba-rs",
- "num_cpus",
- "path-clean",
- "rayon",
- "sanitize-filename",
- "serde",
- "simd-json",
- "strum",
- "threadpool",
- "time",
- "tokio",
- "tokio-tungstenite",
- "toml",
- "tower",
- "unicode-normalization",
- "which",
- "windows-sys 0.61.2",
-]
 
 [[package]]
 name = "tungstenite"

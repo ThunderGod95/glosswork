@@ -1,10 +1,10 @@
-# translations_manager
+# Glosswork
 
 A command-line tool for managing translation projects. It assists with translation workflows, including glossary generation, content searching, formatting cleanup, and final distribution compilation.
 
 ## First-Run Setup
 
-On the first execution, `translations_manager` will run an interactive setup wizard to configure the following:
+On the first execution, `glosswork` will run an interactive setup wizard to configure the following:
 1.  **Preferred Editor**: Scans for installed editors (e.g., VS Code, Zed).
 2.  **Projects Root Directory**: The base directory where all project folders will reside. 
 
@@ -12,11 +12,11 @@ These settings are saved locally and apply to all future runs.
 
 ## Environment Setup & Aliasing
 
-To use the binary globally from your terminal without typing the full path or full name (`translations_manager`), add it to your system's `PATH` and create a shorter alias (e.g., `tm`).
+To use the binary globally from your terminal without typing the full path or full name (`glosswork`), add it to your system's `PATH` and create a shorter alias (e.g., `gw`).
 
 ### Windows (PowerShell)
 
-1. Move `translations_manager.exe` to a permanent folder (e.g., `C:\Program Files\TranslationsManager`).
+1. Move `glosswork.exe` to a permanent folder (e.g., `C:\Program Files\Glosswork`).
 2. Add this folder to your Environment Variables:
     - Open the Start Menu, type "Environment Variables", and select "Edit the system environment variables".
     - Click "Environment Variables" > Select "Path" > "Edit" > "New" and paste the folder path.
@@ -25,7 +25,7 @@ To use the binary globally from your terminal without typing the full path or fu
 
 ```powershell
 function tm {
-    & "YOUR_PATH\translations_manager.exe" $args
+    & "YOUR_PATH\glosswork.exe" $args
 }
 ```
 5. Restart PowerShell.
@@ -51,7 +51,7 @@ These arguments can be applied to the base command before specifying a task.
 Initializes a new translation project directory structure.
 
 ```powershell
-tm init [PROJECT_NAME]
+gw init [PROJECT_NAME]
 ```
 
 #### `glossary`
@@ -68,7 +68,7 @@ You can now easily paste this prompt in your chat.
 Since you'll use this command the most I recommend creating an alias for this command:
 
 ```powershell
-function tmg {
+function gwg {
     & "YOUR_PATH\translations_manager.exe" glossary
 }
 ```
@@ -100,7 +100,7 @@ Compiles translated chapters into distributable formats like EPUB, PDF, or DOCX 
 #### Example
 
 ```powershell
-tm distribute -f pdf -f epub -v 8
+gw distribute -f pdf -f epub -v 8
 ```
 
 _This command creates PDFs and EPUBs for Volume 8._
@@ -114,13 +114,13 @@ A convenience command to quickly open a project or a specific chapter from the t
 ##### Examples
 
 ```powershell
-tm open 717
+gw open 717
 ```
 
 Opens Chapter 717 from the currently selected project.
 
 ```powershell
-tm open
+gw open
 ```
 
 Running the command without specifying a chapter will open the entire project folder.

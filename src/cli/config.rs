@@ -8,7 +8,7 @@ use std::sync::{LazyLock, RwLock};
 
 use crate::cli::util::get_config_file_path;
 
-pub static PROJECT_PATH_QUALIFIERS: [&str; 3] = ["com", "tg", "tscripts"];
+pub static PROJECT_PATH_QUALIFIERS: [&str; 3] = ["com", "tg", "glosswork"];
 
 pub static CONFIG: LazyLock<RwLock<AppConfig>> =
     LazyLock::new(|| RwLock::new(load_config().expect("Failed to load configuration")));

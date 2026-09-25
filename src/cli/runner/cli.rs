@@ -8,9 +8,8 @@ use crate::cli::distribute::DistributionFormat;
 #[derive(Parser, Debug, Clone)]
 #[command(
     version,
-    about = "Tool for managing translation projects.",
-    long_about = "A tool to assist with translation workflows, \
-                  including glossary generation and content searching."
+    about = "Glosswork translation workbench.",
+    long_about = "A translation workbench for managing source text, glossaries, translation workflows, and publication."
 )]
 pub struct Cli {
     #[command(subcommand)]

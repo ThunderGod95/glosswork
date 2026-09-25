@@ -1,18 +1,44 @@
 use std::{io, sync::Arc, time::Duration};
 
 use axum::{
+    Json,
     extract::{
         Path, State,
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
-    http::StatusCode,
+    http::{StatusCode, header},
     response::{IntoResponse, Response},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::{task, time};
 
 use super::ProjectsConfig;
 use crate::core::projects::{ProjectEntry, project_tree};
+
+pub(super) async fn list(
+    State(config): State<Option<Arc<ProjectsConfig>>>,
+    Path(project): Path<String>,
+) -> Response {
+    let result = match config {
+        Some(config) => scan(config, project).await,
+        None => Err(StatusCode::SERVICE_UNAVAILABLE),
+    };
+
+    let mut response = match result {
+        Ok(entries) => Json(Snapshot {
+            r#type: "snapshot",
+            entries: &entries,
+        })
+        .into_response(),
+        Err(status) => status.into_response(),
+    };
+
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
+
+    response
+}
 
 pub(super) async fn watch(
     State(config): State<Option<Arc<ProjectsConfig>>>,
@@ -56,6 +82,12 @@ struct Snapshot<'a> {
     entries: &'a [ProjectEntry],
 }
 
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum Command {
+    Refresh,
+}
+
 async fn send(socket: &mut WebSocket, text: String) -> bool {
     matches!(
         time::timeout(
@@ -73,7 +105,7 @@ async fn stream(
     project: String,
     mut entries: Vec<ProjectEntry>,
 ) {
-    // one full scan per connection per second; use native notifications
+    // one full scan per connection per second (plus refresh requests); use native notifications
     // and shared scans if large trees or transient changes need to be tracked.
     let mut ticks = time::interval(Duration::from_secs(1));
 
@@ -93,26 +125,38 @@ async fn stream(
         }
 
         loop {
-            tokio::select! {
+            let refresh = tokio::select! {
                 message = socket.recv() => match message {
                     None | Some(Err(_)) | Some(Ok(Message::Close(_))) => return,
-                    _ => {} // Axum responds to WebSocket ping frames automatically.
+
+                    Some(Ok(Message::Text(text))) => {
+                        let mut bytes = text.as_bytes().to_vec();
+                        match simd_json::from_slice::<Command>(&mut bytes) {
+                            Ok(Command::Refresh) => true,
+                            Err(_) => continue,
+                        }
+                    },
+
+                    _ => continue, // Axum responds to WebSocket ping frames automatically.
                 },
-                _ = ticks.tick() => {
-                    match scan(config.clone(), project.clone()).await {
-                        Ok(next) if next != entries => {
-                            entries = next;
-                            break;
-                        }
 
-                        Ok(_) => {},
+                _ = ticks.tick() => false,
+            };
 
-                        Err(_) => {
-                            send(&mut socket, r#"{"type":"error","message":"Project is no longer available or could not be read."}"#.into()).await;
-                            let _ = time::timeout(Duration::from_secs(1), socket.send(Message::Close(None))).await;
-                            return;
-                        }
-                    }
+            match scan(config.clone(), project.clone()).await {
+                Ok(next) if refresh || next != entries => {
+                    entries = next;
+                    break;
+                }
+
+                Ok(_) => {}
+
+                Err(_) => {
+                    send(&mut socket, r#"{"type":"error","message":"Project is no longer available or could not be read."}"#.into()).await;
+                    let _ =
+                        time::timeout(Duration::from_secs(1), socket.send(Message::Close(None)))
+                            .await;
+                    return;
                 }
             }
         }

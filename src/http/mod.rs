@@ -22,6 +22,7 @@ fn build(projects: Option<Arc<ProjectsConfig>>) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/api/v1/projects", get(discover_projects))
+        .route("/api/v1/projects/{project}/files", get(project_files::list))
         .route(
             "/api/v1/projects/{project}/files/ws",
             get(project_files::watch),

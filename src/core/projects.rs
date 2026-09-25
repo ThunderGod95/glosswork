@@ -20,7 +20,6 @@ pub fn get_projects(base_path: &Path) -> Result<Vec<String>> {
 
             if metadata.is_dir()
                 && visible_entry(path.file_name()?.to_str()?, &metadata)
-                && path.file_name()?.to_str()? != "tscripts"
             {
                 return Some(path.file_name()?.to_str()?.to_string());
             }
@@ -65,7 +64,6 @@ fn visible_entry(name: &str, metadata: &fs::Metadata) -> bool {
 pub fn project_tree(base: &Path, project: &str) -> io::Result<Vec<ProjectEntry>> {
     if project.is_empty()
         || project.starts_with('.')
-        || project == "tscripts"
         || project.ends_with(['.', ' '])
         || project.contains(['/', '\\', ':'])
         || project.chars().any(char::is_control)
