@@ -207,7 +207,7 @@ fn chinese_fuzzy_search<'a>(terms: &[&'a str], text: &'a str, threshold: u32) ->
         .par_iter()
         .flat_map(|word| {
             bk_tree
-                .find(word, threshold)
+                .find(&word.word, threshold)
                 .map(|(_distance, term)| **term)
                 .collect::<Vec<_>>()
         })
