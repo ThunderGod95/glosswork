@@ -1,0 +1,35 @@
+{
+    "languages": {
+        "TypeScript": {
+            "language_servers": ["typescript-ls"]
+        },
+
+        "TSX": {
+            "language_servers": ["typescript-ls", "tailwindcss-language-server"]
+        },
+
+        "CSS": {
+            "enable_language_server": false
+        },
+
+        "JSON": {
+            "enable_language_server": false
+        },
+
+        "JSONC": {
+            "enable_language_server": false
+        },
+
+        "HTML": {
+            "enable_language_server": false
+        }
+    },
+
+    "lsp": {
+        "typescript-ls": {
+            "settings": {
+                "package_version": "7.0.2"
+            }
+        }
+    }
+}
