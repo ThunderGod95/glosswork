@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use arboard::Clipboard;
 use console::style;
 use std::fs::{self, File};
@@ -75,6 +75,7 @@ pub fn write_raws(write_path: &Path, raws: &[Chapter]) {
 #[cfg(target_os = "linux")]
 use arboard::SetExtLinux;
 
+#[cfg(target_os = "linux")]
 pub const CLIPBOARD_DAEMON_ARG: &str = "__clipboard_daemon";
 
 pub fn copy_prompt(content: &str) -> Result<()> {
