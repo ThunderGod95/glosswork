@@ -34,11 +34,13 @@ indicatif = { version = "0.18.3", features = ["rayon"] }
 which = "8.0.0"
 fancy-regex = "0.16.2"
 comrak = "0.54.0"
-axum = "0.8"
-tokio = { version = "1", features = ["rt-multi-thread", "net", "signal", "macros"] }
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "signal", "macros", "time"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
+tokio-tungstenite = "0.29"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }

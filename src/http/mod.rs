@@ -1,3 +1,4 @@
+mod project_files;
 mod routes;
 
 use std::{path::PathBuf, sync::Arc};
@@ -21,6 +22,10 @@ fn build(projects: Option<Arc<ProjectsConfig>>) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/api/v1/projects", get(discover_projects))
+        .route(
+            "/api/v1/projects/{project}/files/ws",
+            get(project_files::watch),
+        )
         .route("/api/v1/glossary/match", post(match_glossary))
         .route(
             "/api/v1/prompts/translation",
@@ -33,9 +38,7 @@ fn build(projects: Option<Arc<ProjectsConfig>>) -> Router {
 
 pub fn launch() -> anyhow::Result<()> {
     let projects = match std::env::var_os("HTTP_PROJECTS_DIR") {
-        None => anyhow::bail!(
-            "Set HTTP_PROJECTS_DIR to enable project discovery"
-        ),
+        None => anyhow::bail!("Set HTTP_PROJECTS_DIR to enable project discovery"),
 
         Some(directory) => {
             anyhow::ensure!(!directory.is_empty(), "HTTP_PROJECTS_DIR must not be empty");
@@ -44,9 +47,7 @@ pub fn launch() -> anyhow::Result<()> {
 
             anyhow::ensure!(directory.is_dir(), "HTTP_PROJECTS_DIR must be a directory");
 
-            Some(Arc::new(ProjectsConfig {
-                directory,
-            }))
+            Some(Arc::new(ProjectsConfig { directory }))
         }
     };
 
