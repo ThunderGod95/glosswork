@@ -35,6 +35,8 @@ which = "8.0.6"
 fancy-regex = "0.19.2"
 comrak = "0.55.0"
 axum = { version = "0.8", features = ["ws"] }
+utoipa = "5"
+utoipa-scalar = { version = "0.3", features = ["axum"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "signal", "macros", "time"] }
 
 [dev-dependencies]

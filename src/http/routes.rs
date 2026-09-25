@@ -22,8 +22,10 @@ const MAX_FUZZY_THRESHOLD: u32 = 4;
 
 type ApiResult<T> = Result<Json<T>, (StatusCode, Json<ApiErrorResponse>)>;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub(super) struct MatchGlossaryRequest {
+    /// Text to search; must contain non-whitespace characters.
+    #[schema(example = "李白走进了房间。", min_length = 1)]
     pub content: String,
     pub glossary: Vec<GlossaryEntry>,
 
@@ -31,28 +33,34 @@ pub(super) struct MatchGlossaryRequest {
     pub options: GlossaryOptions,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(super) struct MatchGlossaryResponse {
+    /// Matching entries in the order supplied by the caller.
     pub micro_glossary: Vec<GlossaryEntry>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(super) struct HealthResponse {
+    #[schema(example = "ok")]
     pub status: &'static str,
     pub version: &'static str,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(super) struct ApiErrorResponse {
     pub error: ApiError,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(super) struct ApiError {
+    /// Machine-readable error identifier.
     pub code: String,
     pub message: String,
 }
 
+/// Check server health.
+#[utoipa::path(get, path = "/health", tag = "Health",
+    responses((status = 200, description = "Server is running", body = HealthResponse)))]
 pub(super) async fn health() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok",
@@ -60,11 +68,20 @@ pub(super) async fn health() -> Json<HealthResponse> {
     })
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 struct ProjectsResponse {
     projects: Vec<String>,
 }
 
+/// List available projects.
+///
+/// Returns sorted visible directory names. Hidden directories and symlinks are excluded.
+/// Requires HTTP_PROJECTS_DIR. Responses use Cache-Control: no-store.
+#[utoipa::path(get, path = "/api/v1/projects", tag = "Projects",
+    responses(
+        (status = 200, description = "Project names", body = ProjectsResponse),
+        (status = 500, description = "Directory could not be read or contains no projects", body = ApiErrorResponse)
+    ))]
 pub(super) async fn discover_projects(
     State(config): State<Option<Arc<ProjectsConfig>>>,
 ) -> Response {
@@ -87,6 +104,20 @@ pub(super) async fn discover_projects(
     response
 }
 
+/// Match glossary entries against text.
+///
+/// Performs exact matching followed by optional fuzzy matching. An empty glossary is valid.
+/// Options default to fuzzy=true and fuzzy_threshold=1; the maximum threshold is 4.
+#[utoipa::path(post, path = "/api/v1/glossary/match", tag = "Glossary",
+    request_body = MatchGlossaryRequest,
+    responses(
+        (status = 200, description = "Matching glossary entries", body = MatchGlossaryResponse),
+        (status = 400, description = "Malformed JSON, blank content, or invalid_fuzzy_threshold", body = ApiErrorResponse),
+        (status = 413, description = "Request body exceeds 16 MiB", body = ApiErrorResponse),
+        (status = 415, description = "Content-Type must be application/json", body = ApiErrorResponse),
+        (status = 422, description = "JSON does not match the request schema", body = ApiErrorResponse),
+        (status = 500, description = "Glossary processing failed", body = ApiErrorResponse)
+    ))]
 pub(super) async fn match_glossary(
     Json(request): Json<MatchGlossaryRequest>,
 ) -> ApiResult<MatchGlossaryResponse> {
@@ -105,6 +136,21 @@ pub(super) async fn match_glossary(
     }))
 }
 
+/// Build a translation prompt.
+///
+/// Combines translation instructions, matching glossary entries, and chapter text.
+/// Does not call an LLM or write files. Both chapter and translation_prompt must be nonblank.
+/// Options default to fuzzy=true and fuzzy_threshold=1; the maximum threshold is 4.
+#[utoipa::path(post, path = "/api/v1/prompts/translation", tag = "Prompts",
+    request_body = PreparePromptRequest,
+    responses(
+        (status = 200, description = "Prepared prompt and matching glossary", body = PreparePromptResult),
+        (status = 400, description = "Malformed JSON, empty_field, or invalid_fuzzy_threshold", body = ApiErrorResponse),
+        (status = 413, description = "Request body exceeds 16 MiB", body = ApiErrorResponse),
+        (status = 415, description = "Content-Type must be application/json", body = ApiErrorResponse),
+        (status = 422, description = "JSON does not match the request schema", body = ApiErrorResponse),
+        (status = 500, description = "Prompt preparation failed", body = ApiErrorResponse)
+    ))]
 pub(super) async fn prepare_translation_prompt(
     Json(request): Json<PreparePromptRequest>,
 ) -> ApiResult<PreparePromptResult> {

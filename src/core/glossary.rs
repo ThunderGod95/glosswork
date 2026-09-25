@@ -23,13 +23,19 @@ static RE_PREPROCESS: LazyLock<Regex> = LazyLock::new(|| {
 /// Initialised once on first use and reused for every glossary request.
 static JIEBA: LazyLock<Jieba> = LazyLock::new(Jieba::new);
 
-#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone, utoipa::ToSchema)]
 pub struct GlossaryEntry {
+    /// English translation.
+    #[schema(example = "Li Bai")]
     pub en: String,
+    /// Chinese term to match.
+    #[schema(example = "李白")]
     pub cn: String,
+    #[schema(example = "Li Bai")]
     pub pinyin: String,
 
     #[serde(rename = "type")]
+    #[schema(example = "character")]
     pub _type: String,
 
     pub gender: Option<String>,
@@ -38,13 +44,15 @@ pub struct GlossaryEntry {
 }
 
 /// Controls how glossary matching is performed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(default)]
 pub struct GlossaryOptions {
     /// Whether fuzzy matching should be performed after exact matching.
+    #[schema(default = true)]
     pub fuzzy: bool,
 
     /// Maximum Levenshtein distance accepted by fuzzy matching.
+    #[schema(default = 1, minimum = 0, maximum = 4)]
     pub fuzzy_threshold: u32,
 }
 

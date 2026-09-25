@@ -4,18 +4,26 @@ use serde::{Deserialize, Serialize};
 
 use super::glossary::{GlossaryEntry, GlossaryOptions, create_micro_glossary_with_options};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct PreparePromptRequest {
+    /// Chinese chapter text; must contain non-whitespace characters.
+    #[schema(example = "李白走进了房间。", min_length = 1)]
     pub chapter: String,
     pub glossary: Vec<GlossaryEntry>,
+    /// Instructions prepended to the glossary and chapter; must not be blank.
+    #[schema(
+        example = "Translate the following chapter into English.",
+        min_length = 1
+    )]
     pub translation_prompt: String,
 
     #[serde(default, rename = "options")]
     pub glossary_options: GlossaryOptions,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct PreparePromptResult {
+    /// Complete prompt containing instructions, formatted glossary, and chapter.
     pub prompt: String,
     pub micro_glossary: Vec<GlossaryEntry>,
 }

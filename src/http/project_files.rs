@@ -13,26 +13,34 @@ use serde::{Deserialize, Serialize};
 use tokio::{task, time};
 
 use super::ProjectsConfig;
+use super::routes::ApiErrorResponse;
 use crate::core::projects::{
     FileOperation, ProjectEntry, modify_project_file, project_tree, read_project_file,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(super) struct FilePath {
+    /// Project-relative path using forward slashes; no empty, hidden, or traversal components.
+    #[param(example = "raws/001.txt")]
     path: String,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 pub(super) struct FileContent {
+    /// UTF-8 file contents. An empty string is valid.
+    #[schema(example = "Chapter text")]
     content: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub(super) struct MoveRequest {
+    /// New project-relative path. Parent directory must exist; destination must not exist.
+    #[schema(example = "raws/002.txt")]
     destination: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub(super) enum CreateRequest {
     File {
@@ -45,6 +53,18 @@ pub(super) enum CreateRequest {
     },
 }
 
+/// Read a UTF-8 file.
+///
+/// Hidden entries and symlinks are inaccessible. Responses use Cache-Control: no-store.
+#[utoipa::path(get, path = "/api/v1/projects/{project}/file", tag = "Project files",
+    params(("project" = String, Path, description = "Visible project directory name"), FilePath),
+    responses(
+        (status = 200, description = "UTF-8 file contents", body = FileContent),
+        (status = 400, description = "Invalid path, not a file, or invalid UTF-8", body = ApiErrorResponse),
+        (status = 403, description = "Path is inaccessible", body = ApiErrorResponse),
+        (status = 404, description = "Project or file not found", body = ApiErrorResponse),
+        (status = 500, description = "File could not be read", body = ApiErrorResponse)
+    ))]
 pub(super) async fn read(
     State(config): State<Option<Arc<ProjectsConfig>>>,
     Path(project): Path<String>,
@@ -73,6 +93,22 @@ pub(super) async fn read(
     response
 }
 
+/// Replace an existing file's contents.
+///
+/// Overwrites the complete file with UTF-8 text. The file must already exist.
+#[utoipa::path(put, path = "/api/v1/projects/{project}/file", tag = "Project files",
+    params(("project" = String, Path, description = "Visible project directory name"), FilePath),
+    request_body = FileContent,
+    responses(
+        (status = 204, description = "File updated; no response body"),
+        (status = 400, description = "Invalid path, not a file, or malformed JSON", body = ApiErrorResponse),
+        (status = 403, description = "Path is inaccessible", body = ApiErrorResponse),
+        (status = 404, description = "Project or file not found", body = ApiErrorResponse),
+        (status = 413, description = "Request body exceeds 16 MiB", body = ApiErrorResponse),
+        (status = 415, description = "Content-Type must be application/json", body = ApiErrorResponse),
+        (status = 422, description = "JSON does not match the request schema", body = ApiErrorResponse),
+        (status = 500, description = "File could not be written", body = ApiErrorResponse)
+    ))]
 pub(super) async fn write(
     State(config): State<Option<Arc<ProjectsConfig>>>,
     Path(project): Path<String>,
@@ -89,6 +125,23 @@ pub(super) async fn write(
     .await
 }
 
+/// Move or rename a file or directory within a project.
+///
+/// Destination must not exist and its parent must exist. Moving a directory into itself is rejected.
+#[utoipa::path(patch, path = "/api/v1/projects/{project}/file", tag = "Project files",
+    params(("project" = String, Path, description = "Visible project directory name"), FilePath),
+    request_body = MoveRequest,
+    responses(
+        (status = 204, description = "Entry moved; no response body"),
+        (status = 400, description = "Invalid path, move into itself, or malformed JSON", body = ApiErrorResponse),
+        (status = 403, description = "Path is inaccessible", body = ApiErrorResponse),
+        (status = 404, description = "Project, source, or destination parent not found", body = ApiErrorResponse),
+        (status = 409, description = "Destination already exists", body = ApiErrorResponse),
+        (status = 413, description = "Request body exceeds 16 MiB", body = ApiErrorResponse),
+        (status = 415, description = "Content-Type must be application/json", body = ApiErrorResponse),
+        (status = 422, description = "JSON does not match the request schema", body = ApiErrorResponse),
+        (status = 500, description = "Entry could not be moved", body = ApiErrorResponse)
+    ))]
 pub(super) async fn move_entry(
     State(config): State<Option<Arc<ProjectsConfig>>>,
     Path(project): Path<String>,
@@ -105,6 +158,24 @@ pub(super) async fn move_entry(
     .await
 }
 
+/// Create a file or directory.
+///
+/// Use kind="file" with path and optional content (defaults to empty), or kind="directory" with path.
+/// Parent directories must already exist. Existing entries are never overwritten.
+#[utoipa::path(post, path = "/api/v1/projects/{project}/files", tag = "Project files",
+    params(("project" = String, Path, description = "Visible project directory name")),
+    request_body = CreateRequest,
+    responses(
+        (status = 201, description = "Entry created; no response body"),
+        (status = 400, description = "Invalid path or malformed JSON", body = ApiErrorResponse),
+        (status = 403, description = "Path is inaccessible", body = ApiErrorResponse),
+        (status = 404, description = "Project or parent directory not found", body = ApiErrorResponse),
+        (status = 409, description = "Entry already exists", body = ApiErrorResponse),
+        (status = 413, description = "Request body exceeds 16 MiB", body = ApiErrorResponse),
+        (status = 415, description = "Content-Type must be application/json", body = ApiErrorResponse),
+        (status = 422, description = "JSON does not match the request schema", body = ApiErrorResponse),
+        (status = 500, description = "Entry could not be created", body = ApiErrorResponse)
+    ))]
 pub(super) async fn create(
     State(config): State<Option<Arc<ProjectsConfig>>>,
     Path(project): Path<String>,
@@ -152,6 +223,19 @@ fn file_error(error: io::Error) -> StatusCode {
     }
 }
 
+/// List the project's file tree.
+///
+/// Returns a complete sorted snapshot with project-relative paths, excluding hidden entries and
+/// symlinks. Empty directories are included. Responses use Cache-Control: no-store.
+#[utoipa::path(get, path = "/api/v1/projects/{project}/files", tag = "Project files",
+    params(("project" = String, Path, description = "Visible project directory name")),
+    responses(
+        (status = 200, description = "Complete file tree", body = Snapshot),
+        (status = 400, description = "Invalid project name", body = ApiErrorResponse),
+        (status = 403, description = "Permission denied", body = ApiErrorResponse),
+        (status = 404, description = "Project not found", body = ApiErrorResponse),
+        (status = 500, description = "Project could not be scanned", body = ApiErrorResponse)
+    ))]
 pub(super) async fn list(
     State(config): State<Option<Arc<ProjectsConfig>>>,
     Path(project): Path<String>,
@@ -177,6 +261,24 @@ pub(super) async fn list(
     response
 }
 
+/// Watch the project's file tree over WebSocket.
+///
+/// Connect using ws:// (wss:// behind TLS). Sends a JSON Snapshot immediately, then polls every
+/// second and sends complete snapshots when the tree changes. Content-only edits do not change
+/// the tree. Send {"type":"refresh"} to force a snapshot; other commands are ignored.
+/// Client messages and frames are limited to 4096 bytes. If scanning fails, sends
+/// {"type":"error","message":"Project is no longer available or could not be read."} and closes.
+/// Scalar's HTTP client cannot exercise this streaming protocol; use a WebSocket client.
+#[utoipa::path(get, path = "/api/v1/projects/{project}/files/ws", tag = "Project files",
+    params(("project" = String, Path, description = "Visible project directory name")),
+    responses(
+        (status = 101, description = "WebSocket upgrade; subsequent text messages contain Snapshot JSON"),
+        (status = 400, description = "Invalid project name or WebSocket handshake", body = ApiErrorResponse),
+        (status = 403, description = "Permission denied", body = ApiErrorResponse),
+        (status = 404, description = "Project not found", body = ApiErrorResponse),
+        (status = 426, description = "WebSocket upgrade required", body = ApiErrorResponse),
+        (status = 500, description = "Project could not be scanned", body = ApiErrorResponse)
+    ))]
 pub(super) async fn watch(
     State(config): State<Option<Arc<ProjectsConfig>>>,
     Path(project): Path<String>,
@@ -209,8 +311,10 @@ async fn scan(
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 struct Snapshot<'a> {
+    /// Always "snapshot".
+    #[schema(value_type = String, pattern = "^snapshot$", example = "snapshot")]
     r#type: &'static str,
     entries: &'a [ProjectEntry],
 }

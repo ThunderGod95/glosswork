@@ -40,9 +40,13 @@ pub fn get_projects(base_path: &Path) -> Result<Vec<String>> {
     Ok(projects)
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, utoipa::ToSchema)]
 pub struct ProjectEntry {
+    /// Project-relative path, with forward slashes.
+    #[schema(example = "raws/001.txt")]
     pub path: String,
+    /// Entry type: file or directory.
+    #[schema(value_type = String, pattern = "^(file|directory)$", example = "file")]
     pub kind: &'static str,
 }
 

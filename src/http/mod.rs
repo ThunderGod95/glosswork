@@ -1,3 +1,4 @@
+mod docs;
 mod project_files;
 mod routes;
 
@@ -13,13 +14,20 @@ use axum::{
 use routes::{
     default_error, discover_projects, health, match_glossary, prepare_translation_prompt,
 };
+use utoipa_scalar::{Scalar, Servable};
 
 pub(super) struct ProjectsConfig {
     directory: PathBuf,
 }
 
 fn build(projects: Option<Arc<ProjectsConfig>>) -> Router {
+    let openapi = docs::openapi(projects.is_some());
     let mut router = Router::new()
+        .merge(Scalar::with_url("/docs", openapi.clone()))
+        .route(
+            "/api-docs/openapi.json",
+            get(move || async move { axum::Json(openapi) }),
+        )
         .route("/health", get(health))
         .route("/api/v1/glossary/match", post(match_glossary))
         .route(
@@ -80,6 +88,7 @@ pub fn launch() -> anyhow::Result<()> {
             let listener = tokio::net::TcpListener::bind(address).await?;
 
             eprintln!("HTTP server listening on http://{}", listener.local_addr()?);
+            eprintln!("API documentation: http://{}/docs", listener.local_addr()?);
 
             axum::serve(listener, build(projects))
                 .with_graceful_shutdown(shutdown_signal())
