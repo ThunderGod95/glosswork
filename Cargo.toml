@@ -1,7 +1,13 @@
 [package]
 name = "glosswork_engine"
-version = "2.1.0"
+version = "2.1.1"
 edition = "2024"
+
+[package.metadata.winresource]
+ProductName = "Glosswork"
+FileDescription = "Glosswork translation toolkit"
+OriginalFilename = "glosswork.exe"
+LegalCopyright = "Copyright © 2026 ThunderGod95"
 
 [[bin]]
 name = "glosswork"
@@ -38,6 +44,7 @@ axum = { version = "0.8", features = ["ws"] }
 utoipa = "5"
 utoipa-scalar = { version = "0.3", features = ["axum"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "signal", "macros", "time"] }
+reqwest = "0.13.5"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
@@ -46,6 +53,9 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
+
+[build-dependencies]
+winresource = "0.1.31"
 
 [profile.release]
 opt-level = "z"
